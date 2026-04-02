@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Inscripción — Detección de Empalmes</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #f7f6f3;
+    --surface:  #ffffff;
+    --border:   #e0ddd6;
+    --border2:  #c8c5bc;
+    --text:     #1a1a18;
+    --muted:    #6b6a65;
+    --hint:     #9b9a95;
+    --color-background-primary: var(--surface);
+    --accent:   #1a1a18;
+    --ok-bg:    #eaf3de; --ok-tx:    #27500a;
+    --warn-bg:  #faeeda; --warn-tx:  #633806;
+    --err-bg:   #fcebeb; --err-tx:   #791f1f;
+    --info-bg:  #e6f1fb; --info-tx:  #0c447c;
+    --radius:   8px;
+    --radius-lg: 12px;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px;
+         color: var(--text); background: var(--bg); line-height: 1.5; }
+
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+  header { margin-bottom: 24px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .full   { grid-column: 1 / -1; }
+
+  /* ── Cards ── */
+  .card { background: var(--surface); border: 0.5px solid var(--border);
+          border-radius: var(--radius-lg); padding: 20px; }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+  /* ── Forms ── */
+  label  { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  textarea, input[type=number], input[type=text] {
+    width: 100%; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    padding: 8px 10px; font-family: 'Courier New', monospace; font-size: 12px;
+    color: var(--text); background: var(--surface); resize: vertical;
+  }
+  textarea { min-height: 130px; }
+  input[type=number] { font-family: system-ui, sans-serif; font-size: 13px;
+                       width: 90px; min-height: unset; height: 34px; resize: none; }
+  textarea:focus, input:focus { outline: none; border-color: #888; }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+  button {
+    border: 0.5px solid var(--border2); border-radius: var(--radius);
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+    background: var(--surface); color: var(--text); transition: background .12s;
+  }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--text); color: #fff; border-color: transparent; }
+  button.primary:hover { opacity: .85; }
+  button.export { background: var(--info-bg); color: var(--info-tx); border-color: #b5d4f4; }
+  button.export:hover { background: #b5d4f4; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Tabs ── */
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+         color: var(--muted); border: 0.5px solid transparent; user-select: none; }
+  .tab.active { background: var(--surface); border-color: var(--border2);
+                color: var(--text); font-weight: 500; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Metrics ── */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  .metric { background: var(--bg); border-radius: var(--radius); padding: 12px 14px; }
+  .metric .lbl { font-size: 12px; color: var(--muted); }
+  .metric .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .metric .val.ok  { color: var(--ok-tx); }
+  .metric .val.err { color: var(--err-tx); }
+  .metric .val.warn{ color: var(--warn-tx); }
+
+  /* ── Tables ── */
+  .tbl-wrap { max-height: 360px; overflow-y: auto; border: 0.5px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { position: sticky; top: 0; background: var(--bg); padding: 7px 10px;
+             font-weight: 500; font-size: 11px; color: var(--muted); text-align: left;
+             border-bottom: 0.5px solid var(--border); text-transform: uppercase;
+             letter-spacing: .04em; white-space: nowrap; }
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--text); }
+  thead th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+  thead th.sort-desc::after { content: ' ▼'; font-size: 9px; }
+  td { padding: 7px 10px; border-bottom: 0.5px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+
+  /* ── Badges ── */
+  .badge { display: inline-block; font-size: 11px; padding: 2px 7px;
+           border-radius: 4px; font-weight: 500; white-space: nowrap; }
+  .badge.ok   { background: var(--ok-bg);   color: var(--ok-tx); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-tx); }
+  .badge.err  { background: var(--err-bg);  color: var(--err-tx); }
+  .badge.info { background: var(--info-bg); color: var(--info-tx); }
+
+  /* ── Horario chips ── */
+  .hor-chip { display: inline-block; background: var(--bg); border: 0.5px solid var(--border);
+              border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 11px;
+              margin: 1px 0; white-space: nowrap; }
+
+  /* ── Alerts ── */
+  .alert { padding: 10px 14px; border-radius: 0 var(--radius) var(--radius) 0;
+           font-size: 13px; margin: 4px 0; }
+  .alert.ok   { border-left: 3px solid #639922; background: var(--ok-bg);   color: var(--ok-tx); }
+  .alert.warn { border-left: 3px solid #ef9f27; background: var(--warn-bg); color: var(--warn-tx); }
+  .alert.err  { border-left: 3px solid #e24b4a; background: var(--err-bg);  color: var(--err-tx); }
+
+  /* ── Status line ── */
+  .status { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 18px; }
+
+  /* ── Config row ── */
+  .cfg-row { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  .cfg-row .field { display: flex; flex-direction: column; gap: 4px; }
+
+  /* ── Spinner ── */
+  #spinner { display: none; font-size: 13px; color: var(--muted); }
+
+  /* ── Section header ── */
+  .sec-hdr { display: flex; align-items: center; justify-content: space-between;
+             margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+  .sec-hdr small { font-size: 12px; color: var(--muted); }
+
+  /* ── File drop zone ── */
+  .drop-zone {
+    border: 1.5px dashed var(--border2); border-radius: var(--radius);
+    padding: 10px 14px; margin-top: 10px; cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: var(--muted); transition: background .15s, border-color .15s;
+    background: var(--bg);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    background: var(--info-bg); border-color: #85b7eb; color: var(--info-tx);
+  }
+  .drop-zone.loaded {
+    border-style: solid; border-color: #639922;
+    background: var(--ok-bg); color: var(--ok-tx);
+  }
+  .drop-zone svg { flex-shrink: 0; }
+  .drop-zone input[type=file] { display: none; }
+  .drop-zone .filename { font-weight: 500; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+
+  @media (max-width: 700px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Análisis de inscripción</div>
+        <h1 style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.2">Detección de Empalmes</h1>
+      </div>
+      <div id="header-stats" style="display:none;gap:24px;flex-wrap:wrap">
+        <div style="text-align:right">
+          <div id="stat-alumnos" style="font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">alumnos</div>
+        </div>
+        <div style="text-align:right">
+          <div id="stat-empalmes" style="font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">pares de empalme</div>
+        </div>
+        <div style="text-align:right">
+          <div id="stat-afectados" style="font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">alumnos afectados</div>
+        </div>
+      </div>
+    </div>
+    <p id="status-carga" style="color:var(--muted);font-size:13px;margin-top:8px">Cargando resultados...</p>
+  </header>
+
+    <div class="card full" id="resultados">
+
+    <div class="tab-bar">
+      <span class="tab active" data-tab="empalmes">Empalmes</span>
+      <span class="tab" data-tab="materias">Por materia</span>
+      <span class="tab" data-tab="no-ofertadas">No ofertadas</span>
+      <span class="tab" data-tab="salones">Salones</span>
+      <span class="tab" data-tab="multi-clave">Multi-clave</span>
+    </div>
+
+    <!-- Empalmes -->
+    <div class="tab-panel active" id="tab-empalmes"></div>
+
+
+
+    <!-- Por materia -->
+    <div class="tab-panel" id="tab-materias"></div>
+    <div class="tab-panel" id="tab-no-ofertadas"></div>
+    <div class="tab-panel" id="tab-salones"></div>
+    <div class="tab-panel" id="tab-multi-clave"></div>
+
+  </div>
+
+</div><!-- /container -->
+
+<script>
+
+  // ── Estado ───────────────────────────────────────────────────────────────────
+  let lastResult = null;
+  const sortState = {};
+
+  // ── Utilidades ────────────────────────────────────────────────────────────────
+  function badge(txt, type) {
+    return `<span class="badge ${type}">${txt}</span>`;
+  }
+
+  function sortTable(tableId, colIdx, accessor) {
+    const st = sortState[tableId] || { col: -1, dir: 1 };
+    const dir = st.col === colIdx ? -st.dir : -1;
+    sortState[tableId] = { col: colIdx, dir };
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    const rows  = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const va = accessor(a), vb = accessor(b);
+      if (typeof va === 'number') return dir * (va - vb);
+      return dir * String(va).localeCompare(String(vb), 'es', { numeric: true });
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    table.querySelectorAll('thead th').forEach((th, i) => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (i === colIdx) th.classList.add(dir === 1 ? 'sort-asc' : 'sort-desc');
+    });
+  }
+
+  function cellNum(row, idx) {
+    const txt = row.cells[idx]?.textContent.trim().replace('%','').replace(/[^0-9.\-]/g,'');
+    const n = parseFloat(txt);
+    return isNaN(n) ? 0 : n;
+  }
+  function safeNum(v) { return (v === null || v === undefined || isNaN(v)) ? 0 : v; }
+  function fmt1(v) { const n = safeNum(v); return Number.isFinite(n) ? n.toFixed(1) : '0.0'; }
+  function cellTxt(row, idx) { return row.cells[idx]?.textContent.trim() || ''; }
+
+  // ── Helpers de renderizado ───────────────────────────────────────────────────
+  function fmtHorarios(clave, hc) {
+    const grupos = hc[clave] || [];
+    if (!grupos.length) return '<span style="color:var(--muted)">—</span>';
+    return grupos.map(g =>
+      `<div style="line-height:1.3;margin-bottom:3px">
+        <span style="font-size:12px;font-weight:500">${g.horario}</span>
+        <span style="font-size:11px;color:var(--muted)"> · Gr.${g.grupo}</span>
+      </div>`
+    ).join('');
+  }
+
+  // ── Carga inicial ─────────────────────────────────────────────────────────────
+  async function ejecutar() {
+    const statusEl = document.getElementById('status-carga');
+    try {
+      statusEl.textContent = 'Cargando resultados...';
+      const resp = await fetch('/resultado');
+      if (!resp.ok) {
+        statusEl.textContent = `Error del servidor (${resp.status})`;
+        return;
+      }
+      let data;
+      try {
+        data = await resp.json();
+      } catch(e) {
+        statusEl.textContent = 'Error al parsear respuesta: ' + e.message;
+        return;
+      }
+      lastResult = data;
+      statusEl.style.display = 'none';
+      renderEmpalmes(data);
+      renderMaterias(data);
+      renderNoOfertadas(data);
+    } catch(e) {
+      statusEl.textContent = 'Error de red: ' + e.message;
+    }
+  }
+  window.addEventListener('DOMContentLoaded', ejecutar);
+
+  // ── Tab navigation ────────────────────────────────────────────────────────────
+  document.querySelector('.tab-bar').addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'salones') cargarSalones();
+    if (tab.dataset.tab === 'multi-clave') cargarMultiClave();
+  });
+
+  // ── Exportar CSV ──────────────────────────────────────────────────────────────
+  async function exportarCSV() {
+    const resp = await fetch('/exportar_csv');
+    if (!resp.ok) { alert('Error al exportar'); return; }
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'empalmes.csv';
+    a.click();
+  }
+
+// ── Render: Empalmes ──────────────────────────────────────────────────────────
+function renderEmpalmes(d) {
+  const pares = d.empalme_pares || [];
+  const hc = d.horarios_cursos || {};
+  const el = document.getElementById('tab-empalmes');
+
+  if (!pares.length) {
+    el.innerHTML = '<div class="alert ok">No se detectaron empalmes en ninguna corrida.</div>';
+    return;
+  }
+
+  function filaEmpalme(p) {
+    const razonBadge = p.razon === 'Ambos' ? 'err'
+                     : p.razon === 'Traslape' ? 'warn' : 'info';
+    const pctBadge = p.pct_corridas_con_afectados >= 75 ? 'err'
+                   : p.pct_corridas_con_afectados >= 40 ? 'warn' : 'info';
+    return `<tr>
+      <td><strong>${p.mat1}</strong></td>
+      <td style="min-width:200px;padding-top:6px;padding-bottom:6px">${fmtHorarios(p.mat1, hc)}</td>
+      <td><strong>${p.mat2}</strong></td>
+      <td style="min-width:200px;padding-top:6px;padding-bottom:6px">${fmtHorarios(p.mat2, hc)}</td>
+      <td style="text-align:center">${safeNum(p.alumnos_solicitan_mat1)}</td>
+      <td style="text-align:center">${safeNum(p.alumnos_solicitan_mat2)}</td>
+      <td style="text-align:center">${safeNum(p.alumnos_que_necesitan_ambas)}</td>
+      <td style="text-align:center"><strong>${fmt1(p.promedio_afectados)}</strong></td>
+      <td style="text-align:center">${badge(fmt1(p.pct_corridas_con_afectados) + '%', pctBadge)}</td>
+      <td>${badge(p.razon, razonBadge)}</td>
+      <td>${(p.mismo_semestre && p.mismo_semestre.length) ? badge(p.mismo_semestre.join(', '), 'err') : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+    </tr>`;
+  }
+
+  // Accessors por columna para la tabla de empalmes
+  const empalmeAccessors = [
+    r => cellTxt(r, 0),   // Materia A
+    r => cellTxt(r, 1),   // Horarios A
+    r => cellTxt(r, 2),   // Materia B
+    r => cellTxt(r, 3),   // Horarios B
+    r => cellNum(r, 4),   // Solicitan A
+    r => cellNum(r, 5),   // Solicitan B
+    r => cellNum(r, 6),   // Solicitan ambas
+    r => cellNum(r, 7),   // Afectados
+    r => cellNum(r, 8),   // % corridas
+    r => cellTxt(r, 9),   // Razón
+    r => cellTxt(r, 10),  // Mismo semestre
+  ];
+
+  const sortableCols = [0, 2, 4, 5, 6, 7, 8, 9, 10];  // columnas con ordenamiento útil
+
+  function thEmpalme(label, idx, title='') {
+    const sortable = sortableCols.includes(idx);
+    return `<th${sortable ? ` class="sortable" onclick="sortTable('tbl-empalmes',${idx},empalmeAcc[${idx}])" title="${title}"` : title ? ` title="${title}"` : ''}>${label}</th>`;
+  }
+
+  el.innerHTML = `
+    <div class="sec-hdr">
+      <small>${pares.length} empalme(s) detectado(s) en ${d.n_corridas} corrida(s)</small>
+      <button class="export" onclick="exportarCSV()">Exportar CSV</button>
+    </div>
+    <div class="tbl-wrap">
+    <table id="tbl-empalmes">
+      <thead><tr>
+        ${thEmpalme('Materia A', 0)}
+        <th>Horarios A</th>
+        ${thEmpalme('Materia B', 2)}
+        <th>Horarios B</th>
+        ${thEmpalme('Solicitan A', 4, 'Alumnos que solicitan la materia A')}
+        ${thEmpalme('Solicitan B', 5, 'Alumnos que solicitan la materia B')}
+        ${thEmpalme('Solicitan ambas', 6, 'Alumnos que tienen ambas en su lista')}
+        ${thEmpalme('Prom. afectados', 7, 'Promedio por corrida de alumnos únicos que no pudieron inscribir alguna de las dos materias')}
+        ${thEmpalme('% corridas', 8, 'Corridas donde al menos un alumno no pudo inscribirse')}
+        ${thEmpalme('Razón', 9)}
+        ${thEmpalme('Empalme por plan', 10, 'Programas donde ambas materias están en el mismo semestre del plan de estudios — indica que el plan supone que un alumno típico querrá llevar ambas, lo que hace el conflicto más urgente de atender independientemente de su causa (traslape o cupo)')}
+      </tr></thead>
+      <tbody>${pares.map(filaEmpalme).join('')}</tbody>
+    </table>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      Haz clic en los encabezados para ordenar. Solo se muestran pares donde el backtracking no encontró solución en al menos una corrida.
+    </p>`;
+
+  // Exponer accessors al scope global para los onclick
+  window.empalmeAcc = empalmeAccessors;
+}
+
+// ── Render: Por materia ───────────────────────────────────────────────────────
+function renderMaterias(d) {
+  const rm = d.resumen_materias || {};
+  const datos = Object.entries(rm)
+    .filter(([, v]) => v.promedio_afectados > 0)
+    .sort((a, b) => b[1].promedio_afectados - a[1].promedio_afectados);
+
+  if (!datos.length) {
+    document.getElementById('tab-materias').innerHTML =
+      '<div class="alert ok">Ninguna materia presentó problemas de inscripción.</div>';
+    return;
+  }
+
+  const materiaAcc = [
+    r => cellTxt(r, 0),  // Materia
+    r => cellNum(r, 1),  // Solicitan
+    r => cellNum(r, 2),  // Prom. empalme
+    r => cellNum(r, 3),  // Prom. cupo puro
+    r => cellNum(r, 4),  // Prom. total
+    r => cellNum(r, 5),  // % afectados
+  ];
+  window.materiaAcc = materiaAcc;
+
+  function thMat(label, idx, title='') {
+    return `<th class="sortable" onclick="sortTable('tbl-materias',${idx},materiaAcc[${idx}])"${title ? ` title="${title}"` : ''}>${label}</th>`;
+  }
+
+  const filas = datos.map(([clave, v]) => {
+    const pct = safeNum(v.pct_afectados);
+    const tipoBadge = pct >= 75 ? 'err' : pct >= 40 ? 'warn' : 'info';
+    const tieneEmpalme = v.tipo_fallo === 'empalme' || v.tipo_fallo === 'mixto';
+    const tieneCupo    = safeNum(v.promedio_cupo_puro) > 0;
+    return `<tr>
+      <td><strong>${clave}</strong></td>
+      <td style="text-align:center">${safeNum(v.alumnos_solicitan)}</td>
+      <td style="text-align:center">${tieneEmpalme ? fmt1(v.promedio_empalme) : '—'}</td>
+      <td style="text-align:center">${tieneCupo ? fmt1(v.promedio_cupo_puro) : '—'}</td>
+      <td style="text-align:center"><strong>${fmt1(v.promedio_afectados)}</strong></td>
+      <td style="text-align:center">${badge(fmt1(pct) + '%', tipoBadge)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tab-materias').innerHTML = `
+    <div class="tbl-wrap"><table id="tbl-materias">
+      <thead><tr>
+        ${thMat('Materia', 0)}
+        ${thMat('Solicitan', 1, 'Alumnos que tienen esta materia en su lista')}
+        ${thMat('Prom. empalme', 2, 'Promedio de alumnos por corrida que no pudieron inscribirla por conflicto de horario con otra materia')}
+        ${thMat('Prom. cupo puro', 3, 'Promedio de alumnos por corrida que no pudieron inscribirla porque el grupo estaba lleno')}
+        ${thMat('Prom. total', 4, 'Total: empalme + cupo puro')}
+        ${thMat('% afectados', 5, 'Porcentaje de quienes la solicitan que no pudieron inscribirla')}
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      Ordenada por Prom. total descendente. Haz clic en cualquier encabezado para cambiar el orden.
+      <strong>Prom. empalme</strong> = conflicto irresolvible con otra materia.
+      <strong>Prom. cupo puro</strong> = grupo compatible en horario pero sin lugares disponibles.
+      Una materia puede tener ambos problemas simultáneamente.
+    </p>`;
+}
+
+
+// ── Render: No ofertadas ──────────────────────────────────────────────────────
+function renderNoOfertadas(d) {
+  const lista = d.no_ofertadas || [];
+  const el = document.getElementById('tab-no-ofertadas');
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="alert ok">Todas las materias solicitadas están en la programación.</div>';
+    return;
+  }
+
+  const noOfertadaAcc = [
+    r => cellTxt(r, 0),  // Clave
+    r => cellNum(r, 1),  // Alumnos
+  ];
+  window.noOfertadaAcc = noOfertadaAcc;
+
+  function thNo(label, idx, title='') {
+    return `<th class="sortable" onclick="sortTable('tbl-no-ofertadas',${idx},noOfertadaAcc[${idx}])"${title ? ` title="${title}"` : ''}>${label}</th>`;
+  }
+
+  const filas = lista.map(v => `<tr>
+    <td><strong>${v.clave}</strong></td>
+    <td style="text-align:center"><strong>${v.alumnos_solicitan}</strong></td>
+  </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="sec-hdr">
+      <small>${lista.length} materia(s) solicitadas sin grupo en la programación</small>
+    </div>
+    <div class="tbl-wrap"><table id="tbl-no-ofertadas">
+      <thead><tr>
+        ${thNo('Materia', 0)}
+        ${thNo('Alumnos que la solicitan', 1, 'Número de alumnos que tienen esta materia en su lista pero no tiene grupos programados')}
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      Estas materias aparecen en las listas de alumnos pero no tienen ningún grupo en el archivo de programación.
+      Haz clic en los encabezados para ordenar.
+    </p>`;
+}
+
+// ── Salones: disponibilidad ───────────────────────────────────────────────────
+let salonesData = null;
+let salonesLoading = false;
+
+async function cargarSalones() {
+  if (salonesLoading) return;
+  if (salonesData) { renderSalones(salonesData); return; }
+
+  salonesLoading = true;
+  const el = document.getElementById('tab-salones');
+  el.innerHTML = '<p style="font-size:13px;color:var(--muted);padding:1rem 0">Calculando disponibilidad...</p>';
+
+  try {
+    const resp = await fetch('/salones');
+    const data = await resp.json();
+    if (!resp.ok) {
+      el.innerHTML = '<div class="alert err">' + (data.error || 'Error') + '</div>';
+      return;
+    }
+    salonesData = data;
+    renderSalones(data);
+  } catch(e) {
+    el.innerHTML = '<div class="alert err">Error de red: ' + e.message + '</div>';
+  } finally {
+    salonesLoading = false;
+  }
+}
+
+function renderSalones(data) {
+  const el = document.getElementById('tab-salones');
+  const patrones = data.patrones || [];
+  const slots = data.slots || [];
+  const salones = data.salones || {};
+
+  // Controls
+  let html = `
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <select id="sel-patron" onchange="filtrarSalones()" style="height:34px;min-width:140px">
+        ${patrones.map(p => `<option value="${p}">${p}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="chk-solo-libres" onchange="filtrarSalones()" checked>
+        Solo salones con disponibilidad
+      </label>
+      <span style="font-size:12px;color:var(--muted)" id="salon-count"></span>
+    </div>
+    <div id="salones-tabla"></div>
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--muted)">
+      <span><span style="display:inline-block;width:12px;height:12px;background:#e8593c;border-radius:2px;vertical-align:middle;opacity:.7"></span> Ocupado</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:#639922;border-radius:2px;vertical-align:middle;opacity:.35"></span> Libre ≥1h</span>
+      <span><span style="display:inline-block;width:12px;height:12px;background:var(--bg);border:0.5px solid var(--border);border-radius:2px;vertical-align:middle"></span> Libre &lt;1h</span>
+    </div>`;
+  el.innerHTML = html;
+  filtrarSalones();
+}
+
+function filtrarSalones() {
+  if (!salonesData) return;
+  const patron = document.getElementById('sel-patron').value;
+  const soloLibres = document.getElementById('chk-solo-libres').checked;
+  const slots = salonesData.slots;
+  const salones = salonesData.salones;
+
+  const lista = Object.entries(salones).filter(([, v]) => {
+    if (!soloLibres) return true;
+    const pd = v.patrones[patron];
+    return pd && pd.bloques_libres.length > 0;
+  });
+
+  document.getElementById('salon-count').textContent =
+    lista.length + ' salón(es)' + (soloLibres ? ' con disponibilidad' : '');
+
+  if (!lista.length) {
+    document.getElementById('salones-tabla').innerHTML =
+      '<div class="alert ok">Todos los salones están ocupados en este patrón.</div>';
+    return;
+  }
+
+  // Precompute headers once
+  const slotsByHour = {};
+  slots.forEach(s => {
+    const h = Math.floor(s.min / 60);
+    if (!slotsByHour[h]) slotsByHour[h] = [];
+    slotsByHour[h].push(s);
+  });
+  const horasUnicas = [...new Set(slots.map(s => Math.floor(s.min/60)))];
+
+  const headerHoras = horasUnicas.map(h =>
+    `<th colspan="${slotsByHour[h].length}" style="position:sticky;top:0;z-index:3;background:var(--bg);text-align:center;font-size:10px;padding:4px 0;border-left:0.5px solid var(--border);border-bottom:0.5px solid var(--border)">${h}:00</th>`
+  ).join('');
+
+  const headerSlots = slots.map(s =>
+    `<th style="position:sticky;top:22px;z-index:3;background:var(--bg);font-size:9px;padding:2px 1px;min-width:16px;text-align:center;border-bottom:0.5px solid var(--border);${s.min%60===0?'border-left:0.5px solid var(--border)':''}">` +
+    `${s.min%60===0?'':':30'}</th>`
+  ).join('');
+
+  // Build all rows as one string — fastest DOM approach
+  const partes = [
+    `<div class="tbl-wrap" style="max-height:480px"><table style="border-collapse:collapse;width:100%">`,
+    `<thead><tr>`,
+    `<th rowspan="2" style="position:sticky;left:0;background:var(--bg);text-align:left;padding:4px 8px;white-space:nowrap;z-index:2">Salón</th>`,
+    `<th rowspan="2" style="text-align:center;padding:4px 6px;white-space:nowrap">Cap.</th>`,
+    headerHoras,
+    `<th rowspan="2" style="text-align:left;padding:4px 6px;white-space:nowrap">Bloques libres</th>`,
+    `</tr><tr>`,
+    headerSlots,
+    `</tr></thead><tbody>`
+  ];
+
+  lista.forEach(([salon, v]) => {
+    const pd = v.patrones[patron] || {slots_ocupados:[], bloques_libres:[]};
+    const ocupados = new Set(pd.slots_ocupados);
+    const enBloqueLibre = new Set();
+    (pd.bloques_libres||[]).forEach(bl => {
+      for (let s = bl.ini; s < bl.fin; s += 30) enBloqueLibre.add(s);
+    });
+
+    partes.push(`<tr><td style="position:sticky;left:0;background:var(--color-background-primary);white-space:nowrap;font-size:11px;padding:2px 8px;font-weight:500;border-bottom:0.5px solid var(--border)">${salon}</td>`);
+    partes.push(`<td style="font-size:11px;text-align:center;padding:2px 4px;border-bottom:0.5px solid var(--border)">${v.capacidad||'—'}</td>`);
+
+    slots.forEach(s => {
+      const bl = s.min%60===0 ? 'border-left:0.5px solid var(--border);' : '';
+      let bg = '';
+      if (ocupados.has(s.min))        bg = 'background:#e8593c;opacity:.65;';
+      else if (enBloqueLibre.has(s.min)) bg = 'background:#639922;opacity:.3;';
+      partes.push(`<td style="${bl}${bg}padding:0;height:16px;border-bottom:0.5px solid var(--border)"></td>`);
+    });
+
+    const bloquesTxt = (pd.bloques_libres||[]).map(b=>`${b.ini_fmt}–${b.fin_fmt} (${b.duracion_min}min)`).join(', ')||'—';
+    partes.push(`<td style="font-size:10px;color:var(--muted);padding:2px 6px;white-space:nowrap;border-bottom:0.5px solid var(--border)">${bloquesTxt}</td></tr>`);
+  });
+
+  partes.push(`</tbody></table></div>`);
+  document.getElementById('salones-tabla').innerHTML = partes.join('');
+}
+
+// ── Cursos multi-clave ────────────────────────────────────────────────────────
+let multiClaveData = null;
+let multiClaveLoading = false;
+
+async function cargarMultiClave() {
+  if (multiClaveLoading) return;
+  if (multiClaveData) { renderMultiClave(multiClaveData); return; }
+
+  multiClaveLoading = true;
+  document.getElementById('tab-multi-clave').innerHTML =
+    '<p style="font-size:13px;color:var(--muted);padding:1rem 0">Calculando...</p>';
+
+  try {
+    const resp = await fetch('/multi_clave');
+    const data = await resp.json();
+    if (!resp.ok) {
+      document.getElementById('tab-multi-clave').innerHTML =
+        '<div class="alert err">' + (data.error || 'Error') + '</div>';
+      return;
+    }
+    multiClaveData = data;
+    renderMultiClave(data);
+  } catch(e) {
+    document.getElementById('tab-multi-clave').innerHTML =
+      '<div class="alert err">Error de red: ' + e.message + '</div>';
+  } finally {
+    multiClaveLoading = false;
+  }
+}
+
+function renderMultiClave(data) {
+  const lista = data.cursos_multiples || [];
+  const el = document.getElementById('tab-multi-clave');
+
+  if (!lista.length) {
+    el.innerHTML = '<div class="alert ok">No se encontraron cursos con múltiples claves en el mismo salón y horario.</div>';
+    return;
+  }
+
+  const multiAcc = [
+    r => cellTxt(r, 0),  // Salón
+    r => cellTxt(r, 1),  // Horario
+    r => cellNum(r, 2),  // Cap.
+    r => cellNum(r, 3),  // N claves
+    r => cellTxt(r, 4),  // Claves
+  ];
+  window.multiAcc = multiAcc;
+
+  function thMulti(label, idx, title='') {
+    return `<th class="sortable" onclick="sortTable('tbl-multi',${idx},multiAcc[${idx}])"${title ? ` title="${title}"` : ''}>${label}</th>`;
+  }
+
+  const filas = lista.map(v => `<tr>
+    <td><strong>${v.salon}</strong></td>
+    <td class="horario-cell">${v.horario}</td>
+    <td style="text-align:center">${v.capacidad || '—'}</td>
+    <td style="text-align:center">${badge(v.n_claves, v.n_claves >= 3 ? 'err' : 'warn')}</td>
+    <td>${v.claves.map(c => `<span class="tag">${c}</span>`).join(', ')}</td>
+  </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="sec-hdr">
+      <small>${lista.length} grupo(s) con múltiples claves distintas en el mismo salón y horario</small>
+    </div>
+    <div class="tbl-wrap"><table id="tbl-multi">
+      <thead><tr>
+        ${thMulti('Salón', 0)}
+        ${thMulti('Horario', 1)}
+        ${thMulti('Cap.', 2, 'Capacidad del salón')}
+        ${thMulti('N° claves', 3, 'Número de claves distintas en este grupo')}
+        ${thMulti('Claves', 4, 'Claves de materia que comparten este salón y horario')}
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      Cursos que se imparten en el mismo salón, mismo horario y mismos días con distintas claves de materia.
+      Pueden ser materias equivalentes entre programas (cross-listed) o un posible error en la programación.
+      Haz clic en los encabezados para ordenar.
+    </p>`;
+}
+
+
+</script>
+</body>
+</html>
