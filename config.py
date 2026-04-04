@@ -27,4 +27,4 @@ ARCHIVO_PLANES       = os.path.join(DATA_DIR, "planes.json")   # opcional
 
 # ── Parámetros de simulación ──────────────────────────────────────────────────
 SEED       = 42
-N_CORRIDAS = 50
+N_CORRIDAS = 15
