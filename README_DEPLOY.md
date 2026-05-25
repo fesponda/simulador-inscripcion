@@ -18,8 +18,10 @@ Crea un repositorio en github.com (puede ser público o privado — los datos
 no están en el código) y conéctalo:
 
 ```bash
-git remote add origin https://github.com/TU_USUARIO/simulador-inscripcion.git
-git push -u origin main
+
+
+
+
 ```
 
 ---
