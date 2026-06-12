@@ -694,12 +694,8 @@ function renderMultiClave(data) {
     return `<th class="sortable" onclick="sortTable('tbl-multi',${idx},multiAcc[${idx}])"${title ? ` title="${title}"` : ''}>${label}</th>`;
   }
 
-  const filas = lista.map(v => {
-    const clavesHtml = v.claves.map(c => {
-      const hs = (v.horarios_por_clave && v.horarios_por_clave[c]) || [];
-      const hStr = hs.length ? `<span style="font-size:10px;color:var(--muted);margin-left:4px">(${hs.join(', ')})</span>` : '';
-      return `<div style="margin-bottom:2px"><span class="tag">${c}</span>${hStr}</div>`;
-    }).join('');
+    const filas = lista.map(v => {
+    const clavesHtml = v.claves.map(c => `<span class="tag">${c}</span>`).join(', ');
     return `<tr>
       <td><strong>${v.salon}</strong></td>
       <td class="horario-cell">${v.horario}</td>
@@ -720,7 +716,7 @@ function renderMultiClave(data) {
         ${thMulti('Horario compartido', 1)}
         ${thMulti('Cap.', 2, 'Capacidad del salón')}
         ${thMulti('N° claves', 3, 'Número de claves distintas en este grupo')}
-        ${thMulti('Claves y sus horarios', 4, 'Claves que comparten este salón y horario, con todos sus horarios programados')}
+        ${thMulti('Claves', 4, 'Claves de materia que comparten este salón y horario')}
       </tr></thead>
       <tbody>${filas}</tbody>
     </table></div>

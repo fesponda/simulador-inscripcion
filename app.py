@@ -222,15 +222,15 @@ def exportar_multi_clave():
     import csv as csv_mod
     output = io.StringIO()
     writer = csv_mod.writer(output)
-    writer.writerow(["Salón", "Horario compartido", "Capacidad", "N° Claves",
-                     "Clave", "Todos los horarios de la clave"])
+    writer.writerow(["Salón", "Horario compartido", "Capacidad", "N° Claves", "Claves"])
     for v in DATOS["_multi_clave"]["cursos_multiples"]:
-        for clave in v["claves"]:
-            horarios = " | ".join(v["horarios_por_clave"].get(clave, []))
-            writer.writerow([
-                v["salon"], v["horario"], v["capacidad"],
-                v["n_claves"], clave, horarios,
-            ])
+        writer.writerow([
+            v["salon"],
+            v["horario"],
+            v["capacidad"],
+            v["n_claves"],
+            ", ".join(v["claves"]),
+        ])
     contenido = "\ufeff" + output.getvalue()
     return Response(
         contenido,
