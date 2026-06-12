@@ -544,20 +544,16 @@ def simular_n_veces(alumnos, cursos, seed_base, n_corridas):
 
 # ─── Exportación CSV ──────────────────────────────────────────────────────────
 
-def generar_csv_empalmes(pares, cursos):
+def generar_csv_empalmes(pares, horarios_cursos):
     """Genera el CSV de empalmes como string."""
     output = io.StringIO()
     writer = csv.writer(output)
 
     def fmt_horarios(clave):
-        gs = cursos.get(clave, [])
-        if not gs:
+        grupos = horarios_cursos.get(clave, [])
+        if not grupos:
             return "—"
-        nombres_dias = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa"]
-        partes = []
-        for g in gs:
-            dias = "-".join(n for n, d in zip(nombres_dias, g.dias) if d)
-            partes.append(f"Gr{g.numero}:{g.hora_ini}-{g.hora_fin}({dias})")
+        partes = [f"Gr{g['grupo']}:{g['horario']}" for g in grupos]
         return " | ".join(partes)
 
     writer.writerow([
@@ -569,8 +565,7 @@ def generar_csv_empalmes(pares, cursos):
         "Alumnos_solicitan_ambas",
         "Promedio_afectados_por_corrida",
         "Pct_corridas_con_afectados",
-        "Mismo_semestre",
-        "Recomendacion",
+        "Empalme_por_plan",
     ])
 
     for p in pares:
@@ -584,7 +579,6 @@ def generar_csv_empalmes(pares, cursos):
             p["promedio_afectados"],
             f"{p['pct_corridas_con_afectados']}%",
             "; ".join(p.get("mismo_semestre", [])) or "—",
-            p["recomendacion"],
         ])
 
     return output.getvalue()

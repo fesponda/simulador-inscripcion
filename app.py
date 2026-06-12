@@ -113,6 +113,7 @@ def calcular_cursos_multiples(csv_texto: str) -> dict:
 
     slots = defaultdict(set)
     slot_cap = {}
+    horarios_clave = defaultdict(set)  # {clave: set de horarios}
 
     for row in reader:
         row = {k.strip().lower(): v.strip() for k,v in row.items()}
@@ -133,6 +134,8 @@ def calcular_cursos_multiples(csv_texto: str) -> dict:
         slots[key].add((clave, grupo))
         if key not in slot_cap:
             slot_cap[key] = cap
+        dias_str = '-'.join(n for n,d in zip(DIA_NOM, dias) if d)
+        horarios_clave[clave].add(f"{ini}–{fin} ({dias_str})")
 
     resultado = []
     for (salon, dias, ini, fin), cursos in slots.items():
@@ -147,6 +150,9 @@ def calcular_cursos_multiples(csv_texto: str) -> dict:
             'capacidad': slot_cap[(salon, dias, ini, fin)],
             'claves': sorted(claves_unicas),
             'n_claves': len(claves_unicas),
+            'horarios_por_clave': {
+                c: sorted(horarios_clave[c]) for c in sorted(claves_unicas)
+            },
         })
 
     def hm(t):
@@ -199,12 +205,37 @@ def multi_clave():
 
 @app.route("/exportar_csv")
 def exportar_csv():
-    contenido = generar_csv_empalmes(DATOS["empalme_pares"], {})
+    contenido = generar_csv_empalmes(
+        DATOS["empalme_pares"],
+        DATOS.get("horarios_cursos", {})
+    )
     contenido_bytes = "\ufeff" + contenido
     return Response(
         contenido_bytes,
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=empalmes.csv"},
+    )
+
+
+@app.route("/exportar_multi_clave")
+def exportar_multi_clave():
+    import csv as csv_mod
+    output = io.StringIO()
+    writer = csv_mod.writer(output)
+    writer.writerow(["Salón", "Horario compartido", "Capacidad", "N° Claves",
+                     "Clave", "Todos los horarios de la clave"])
+    for v in DATOS["_multi_clave"]["cursos_multiples"]:
+        for clave in v["claves"]:
+            horarios = " | ".join(v["horarios_por_clave"].get(clave, []))
+            writer.writerow([
+                v["salon"], v["horario"], v["capacidad"],
+                v["n_claves"], clave, horarios,
+            ])
+    contenido = "\ufeff" + output.getvalue()
+    return Response(
+        contenido,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=multi_clave.csv"},
     )
 
 

@@ -694,33 +694,42 @@ function renderMultiClave(data) {
     return `<th class="sortable" onclick="sortTable('tbl-multi',${idx},multiAcc[${idx}])"${title ? ` title="${title}"` : ''}>${label}</th>`;
   }
 
-  const filas = lista.map(v => `<tr>
-    <td><strong>${v.salon}</strong></td>
-    <td class="horario-cell">${v.horario}</td>
-    <td style="text-align:center">${v.capacidad || '—'}</td>
-    <td style="text-align:center">${badge(v.n_claves, v.n_claves >= 3 ? 'err' : 'warn')}</td>
-    <td>${v.claves.map(c => `<span class="tag">${c}</span>`).join(', ')}</td>
-  </tr>`).join('');
+  const filas = lista.map(v => {
+    const clavesHtml = v.claves.map(c => {
+      const hs = (v.horarios_por_clave && v.horarios_por_clave[c]) || [];
+      const hStr = hs.length ? `<span style="font-size:10px;color:var(--muted);margin-left:4px">(${hs.join(', ')})</span>` : '';
+      return `<div style="margin-bottom:2px"><span class="tag">${c}</span>${hStr}</div>`;
+    }).join('');
+    return `<tr>
+      <td><strong>${v.salon}</strong></td>
+      <td class="horario-cell">${v.horario}</td>
+      <td style="text-align:center">${v.capacidad || '—'}</td>
+      <td style="text-align:center">${badge(v.n_claves, v.n_claves >= 3 ? 'err' : 'warn')}</td>
+      <td>${clavesHtml}</td>
+    </tr>`;
+  }).join('');
 
   el.innerHTML = `
-    <div class="sec-hdr">
+    <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <small>${lista.length} grupo(s) con múltiples claves distintas en el mismo salón y horario</small>
+      <button class="export" onclick="window.location='/exportar_multi_clave'">Exportar CSV</button>
     </div>
     <div class="tbl-wrap"><table id="tbl-multi">
       <thead><tr>
         ${thMulti('Salón', 0)}
-        ${thMulti('Horario', 1)}
+        ${thMulti('Horario compartido', 1)}
         ${thMulti('Cap.', 2, 'Capacidad del salón')}
         ${thMulti('N° claves', 3, 'Número de claves distintas en este grupo')}
-        ${thMulti('Claves', 4, 'Claves de materia que comparten este salón y horario')}
+        ${thMulti('Claves y sus horarios', 4, 'Claves que comparten este salón y horario, con todos sus horarios programados')}
       </tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
     <p style="font-size:11px;color:var(--muted);margin-top:8px">
       Cursos que se imparten en el mismo salón, mismo horario y mismos días con distintas claves de materia.
       Pueden ser materias equivalentes entre programas (cross-listed) o un posible error en la programación.
+      Los horarios entre paréntesis muestran <em>todos</em> los grupos de esa clave en la programación.
       Haz clic en los encabezados para ordenar.
-    </p>`;
+    </p>`
 }
 
 
