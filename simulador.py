@@ -6,22 +6,19 @@ Lógica de simulación de inscripción y detección de empalmes.
 import random
 import csv
 import io
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
 # ─── Estructuras de datos ─────────────────────────────────────────────────────
 
 @dataclass
-class Grupo:
-    clave: str
-    numero: str
+class Bloque:
+    """Un bloque de días/horas dentro de un grupo (ej. Lu-Mi 10:00-11:59)."""
     dias: list
     hora_ini: str
     hora_fin: str
     salon: str
-    capacidad: int
-    inscritos: int = 0
 
     def __post_init__(self):
         self._ini_min = self._hm(self.hora_ini)
@@ -35,27 +32,78 @@ class Grupo:
         except Exception:
             return 0
 
-    def tiene_traslape(self, otro):
+    def traslapa_con(self, otro: "Bloque") -> bool:
         dias_comun = any(a and b for a, b in zip(self.dias, otro.dias))
         if not dias_comun:
             return False
         return self._ini_min < otro._fin_min and otro._ini_min < self._fin_min
+
+
+@dataclass
+class Grupo:
+    """
+    Representa un grupo de una materia, que puede tener múltiples bloques
+    de días/horas (ej. Lu-Mi 10:00-11:59 + Ju 7:00-8:59).
+    """
+    clave: str
+    numero: str
+    bloques: list = field(default_factory=list)
+    capacidad: int = 30
+    inscritos: int = 0
+
+    def tiene_traslape(self, otro: "Grupo") -> bool:
+        """True si cualquier bloque de self traslapa con cualquier bloque de otro."""
+        for b1 in self.bloques:
+            for b2 in otro.bloques:
+                if b1.traslapa_con(b2):
+                    return True
+        return False
 
     @property
     def tiene_cupo(self):
         return self.inscritos < self.capacidad
 
     @property
+    def dias(self):
+        """Días combinados de todos los bloques (para compatibilidad)."""
+        d = [0] * 6
+        for b in self.bloques:
+            for i, v in enumerate(b.dias):
+                if v:
+                    d[i] = 1
+        return d
+
+    @property
+    def hora_ini(self):
+        """Hora de inicio del primer bloque."""
+        return self.bloques[0].hora_ini if self.bloques else ""
+
+    @property
+    def hora_fin(self):
+        """Hora de fin del primer bloque."""
+        return self.bloques[0].hora_fin if self.bloques else ""
+
+    @property
+    def salon(self):
+        """Salón del primer bloque."""
+        return self.bloques[0].salon if self.bloques else ""
+
+    @property
     def horario_str(self):
         nombres = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá"]
-        dias_str = "-".join(n for n, d in zip(nombres, self.dias) if d)
-        return f"{self.hora_ini}–{self.hora_fin} ({dias_str})"
+        partes = []
+        for b in self.bloques:
+            dias_str = "-".join(n for n, d in zip(nombres, b.dias) if d)
+            partes.append(f"{b.hora_ini}–{b.hora_fin} ({dias_str})")
+        return " + ".join(partes)
 
     def copia(self):
         return Grupo(
-            clave=self.clave, numero=self.numero, dias=self.dias[:],
-            hora_ini=self.hora_ini, hora_fin=self.hora_fin,
-            salon=self.salon, capacidad=self.capacidad, inscritos=0,
+            clave=self.clave, numero=self.numero,
+            bloques=[Bloque(dias=b.dias[:], hora_ini=b.hora_ini,
+                            hora_fin=b.hora_fin, salon=b.salon)
+                     for b in self.bloques],
+            capacidad=self.capacidad, inscritos=0,
         )
 
 
@@ -71,30 +119,55 @@ class ResultadoMateria:
 # ─── Parseo ───────────────────────────────────────────────────────────────────
 
 def parsear_csv_cursos(contenido):
+    """
+    Parsea el CSV de programación agrupando filas con misma (clave, grupo)
+    en un solo objeto Grupo con múltiples bloques. Esto maneja correctamente
+    materias cuyo grupo ocupa varios patrones de días distintos
+    (ej. Lu-Mi 10:00-11:59 + Ju 7:00-8:59).
+    """
     reader = csv.DictReader(io.StringIO(contenido.strip()))
     reader.fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
-    cursos = {}
+
+    # Acumular bloques por (clave, numero_grupo)
+    grupos_raw = {}   # {(clave, numero): {'cap': int, 'bloques': [Bloque]}}
+
     for row in reader:
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
         clave = row.get("clave", "").strip()
         if not clave:
             continue
+        numero = row.get("grupo", "1")
         dias = [1 if row.get(d, "0") not in ("", "0") else 0
                 for d in ["lu", "ma", "mi", "ju", "vi", "sa"]]
+        if not any(dias):
+            continue
         try:
             cap = int(float(row.get("capacidad", row.get("slbrdef_capacity", 30))))
         except (ValueError, TypeError):
             cap = 30
+
+        key = (clave, numero)
+        if key not in grupos_raw:
+            grupos_raw[key] = {'cap': cap, 'bloques': []}
+
+        grupos_raw[key]['bloques'].append(Bloque(
+            dias=dias,
+            hora_ini=row.get("hor_ini", ""),
+            hora_fin=row.get("hor_fin", ""),
+            salon=row.get("salon", ""),
+        ))
+
+    # Construir diccionario de cursos
+    cursos = {}
+    for (clave, numero), data in grupos_raw.items():
         grupo = Grupo(
-            clave=clave, numero=row.get("grupo", "1"), dias=dias,
-            hora_ini=row.get("hor_ini", ""), hora_fin=row.get("hor_fin", ""),
-            salon=row.get("salon", ""), capacidad=cap,
+            clave=clave, numero=numero,
+            bloques=data['bloques'],
+            capacidad=data['cap'],
         )
         cursos.setdefault(clave, []).append(grupo)
+
     return cursos
-
-
-
 
 
 # ─── Simulación ───────────────────────────────────────────────────────────────
